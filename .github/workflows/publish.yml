@@ -1,0 +1,54 @@
+name: Build and publish container
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: publish-container
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      IMAGE: ghcr.io/jiarielle/computeroll-gpu-miner
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install pinned dependencies and verify hash core
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          clang++ -O3 -std=c++17 -DCPU_ONLY -x c++ keccak.cu -o /tmp/keccak-cpu
+          node test-keccak.mjs /tmp/keccak-cpu
+          bash -n entrypoint.sh
+      - name: Build linux amd64 image
+        run: |
+          docker build --pull --platform linux/amd64 -f Dockerfile.salad \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            -t "$IMAGE:sha-$GITHUB_SHA" -t "$IMAGE:v0.1.0" .
+      - name: Smoke test runtime without GPU or mining
+        run: |
+          docker run --rm "$IMAGE:v0.1.0" node --version
+          docker run --rm "$IMAGE:v0.1.0" node --input-type=module -e "import {keccak256} from 'ethers'; console.log(keccak256(new Uint8Array(84)))"
+          docker run --rm "$IMAGE:v0.1.0" ./keccak-gpu --vectors < /dev/null
+          set +e
+          docker run --rm "$IMAGE:v0.1.0" > /tmp/no-wallet.log 2>&1
+          status=$?
+          set -e
+          test "$status" -ne 0
+          grep -q CROLL_WALLET /tmp/no-wallet.log
+      - name: Publish to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          docker push "$IMAGE:v0.1.0"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:v0.1.0")"
+          printf 'IMAGE_DIGEST=%s\n' "$digest"
+          printf 'Published immutable image: `%s`\n' "$digest" >> "$GITHUB_STEP_SUMMARY"
+      - name: Clear registry credentials
+        if: always()
+        run: docker logout ghcr.io || true

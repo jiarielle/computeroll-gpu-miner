@@ -1,0 +1,9 @@
+{
+  "name": "computeroll-gpu-miner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Public-address-only CUDA Keccak worker. Unsigned candidates only.",
+  "dependencies": {
+    "ethers": "6.17.0"
+  }
+}

@@ -1,0 +1,8 @@
+*
+!keccak.cu
+!worker.mjs
+!test-keccak.mjs
+!node_modules/
+!node_modules/**
+!Dockerfile.salad
+!entrypoint.sh

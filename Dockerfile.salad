@@ -1,0 +1,18 @@
+FROM nvidia/cuda:12.8.1-devel-ubuntu22.04 AS build
+WORKDIR /build
+COPY keccak.cu ./
+RUN nvcc -O3 -std=c++17 -arch=sm_89 keccak.cu -o keccak-gpu
+
+FROM node:22-bookworm-slim AS node
+FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+WORKDIR /workspace/computeroll
+COPY --from=build /build/keccak-gpu ./keccak-gpu
+COPY worker.mjs test-keccak.mjs ./
+COPY node_modules ./node_modules
+COPY entrypoint.sh ./
+RUN chmod 755 entrypoint.sh
+ENV CROLL_SECONDS=3600
+LABEL org.opencontainers.image.source="https://github.com/jiarielle/computeroll-gpu-miner"
+LABEL org.opencontainers.image.description="Public-address-only CUDA Keccak worker for ComputeRoll; unsigned candidates only"
+ENTRYPOINT ["/workspace/computeroll/entrypoint.sh"]
