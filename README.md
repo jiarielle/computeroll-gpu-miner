@@ -11,7 +11,7 @@ Configure a public eligible BSC address at runtime with `CROLL_WALLET`.
 docker run --rm --gpus all \
   -e CROLL_WALLET=YOUR_PUBLIC_BSC_ADDRESS \
   -e CROLL_SECONDS=3600 \
-  ghcr.io/jiarielle/computeroll-gpu-miner:v0.2.0
+  ghcr.io/jiarielle/computeroll-gpu-miner:v0.2.1
 ```
 
 Use the immutable digest from the build summary for deployment. The startup

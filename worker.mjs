@@ -1,5 +1,5 @@
 // Public-address-only worker. Produces unsigned proofs; never broadcasts.
-import {JsonRpcProvider,Contract,keccak256,solidityPackedKeccak256,Interface,getAddress,formatEther} from 'ethers';
+import {JsonRpcProvider,FetchRequest,Contract,keccak256,solidityPackedKeccak256,Interface,getAddress,formatEther} from 'ethers';
 import {spawn} from 'node:child_process';
 import {createInterface} from 'node:readline';
 import {randomBytes} from 'node:crypto';
@@ -11,14 +11,17 @@ const ABI=['function agentRegistry() view returns(address)','function miningStat
 const wallet=getAddress(process.argv[2]);
 const duration=Number(process.argv[3]||'3300');
 if(!Number.isInteger(duration)||duration<1||duration>3600)throw Error('duration must be 1..3600');
-const rpc=new JsonRpcProvider('https://bsc-rpc.publicnode.com');
-rpc._getConnection().timeout=15000;
+const request=new FetchRequest('https://bsc-rpc.publicnode.com');
+request.timeout=15000;
+const rpc=new JsonRpcProvider(request,undefined,{batchMaxCount:1,staticNetwork:true});
 const token=new Contract(TOKEN,ABI,rpc);
 const save=(name,data)=>{const text=JSON.stringify(data,(_,v)=>typeof v==='bigint'?String(v):v,2);writeFileSync(name+'.tmp',text+'\n');renameSync(name+'.tmp',name);};
 const [network,code,registry]=await Promise.all([rpc.getNetwork(),rpc.getCode(TOKEN),token.agentRegistry()]);
 if(network.chainId!==56n||keccak256(code)!==HASH||registry.toLowerCase()!==REGISTRY.toLowerCase())throw Error('chain/runtime/registry mismatch');
-async function state(){const s=await token.miningState(wallet);if(!s.eligible||!s.remaining)throw Error('ineligible or finished');if(s.globalMines+1n<50000n&&await token.walletCapacity(wallet)<s.reward)throw Error('wallet cap');return s;}
-let s=await state();
+let capacityCheckedAt=0;
+async function read(fn){for(let attempt=0;;attempt++){try{return await fn();}catch(e){if(attempt>=2||!['TIMEOUT','NETWORK_ERROR','SERVER_ERROR'].includes(e.code))throw e;await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));}}}
+async function state(forceCapacity=false){const s=await read(()=>token.miningState(wallet));if(!s.eligible||!s.remaining)throw Error('ineligible or finished');if(s.globalMines+1n<50000n&&(forceCapacity||Date.now()-capacityCheckedAt>10000)){if(await read(()=>token.walletCapacity(wallet))<s.reward)throw Error('wallet cap');capacityCheckedAt=Date.now();}return s;}
+let s=await state(true);
 console.log(JSON.stringify({kind:'preflight',wallet,eligible:s.eligible,difficulty:String(s.difficulty),remaining:String(s.remaining),bnb:formatEther(await rpc.getBalance(wallet))}));
 if(process.argv.includes('--check-only'))process.exit(0);
 const child=spawn('./keccak-gpu',[],{stdio:['pipe','pipe','inherit']});
@@ -44,12 +47,12 @@ try {
  while(!stopping&&Date.now()<deadline){
   s=await state();const r=await scan(s,np,counter,count);counter+=count;hashes+=count;
   const hps=Number(count)/r.seconds;
-  count=BigInt(Math.min(2**29,Math.max(2**20,Math.floor(hps))));
+  count=BigInt(Math.min(2**31,Math.max(2**20,Math.floor(hps))));
   if(r.found){
-   const current=await state();
+   const current=await state(true);
    if(current.round!==s.round||current.challenge!==s.challenge)continue;
    const ref=BigInt(r.proof)<current.target?current.globalMines:s.globalMines;
-   if(!await token.isValidSolution(wallet,s.round,r.nonce,ref))continue;
+   if(!await read(()=>token.isValidSolution(wallet,s.round,r.nonce,ref)))continue;
    const candidate={kind:'unsigned-pow-candidate',chainId:56,from:wallet,to:TOKEN,value:'0',personalRound:s.round,nonce:r.nonce,referenceEpoch:ref,challenge:s.challenge,proof:r.proof,data:new Interface(ABI).encodeFunctionData('mine',[s.round,r.nonce,ref]),foundAt:new Date().toISOString(),transactionsSent:0};
    save('candidate.json',candidate);console.log(JSON.stringify(candidate,(_,v)=>typeof v==='bigint'?String(v):v));break;
   }
