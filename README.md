@@ -1,6 +1,6 @@
 # ComputeRoll CUDA worker
 
-CUDA Keccak-256 worker for RTX 4090 (`sm_89`), producing unsigned proof
+CUDA Keccak-256 worker for RTX 4090 (`sm_89`) and RTX 5090 (`sm_120`), producing unsigned proof
 candidates only. It never signs or broadcasts a blockchain transaction.
 
 The image contains no wallet address, wallet session or API credentials.
@@ -11,7 +11,7 @@ Configure a public eligible BSC address at runtime with `CROLL_WALLET`.
 docker run --rm --gpus all \
   -e CROLL_WALLET=YOUR_PUBLIC_BSC_ADDRESS \
   -e CROLL_SECONDS=3600 \
-  ghcr.io/jiarielle/computeroll-gpu-miner:v0.1.0
+  ghcr.io/jiarielle/computeroll-gpu-miner:v0.2.0
 ```
 
 Use the immutable digest from the build summary for deployment. The startup
@@ -36,7 +36,7 @@ this worker.
 Build checks compile the CUDA kernel and test the container's CPU runtime.
 They do not run mining on GitHub Actions. GPU validation must occur on your
 own authorized GPU instance. The same hash core was tested on an RTX 4090
-against 256 ethers vectors and three actual search boundary cases.
+against 256 ethers vectors and three actual search boundary cases. RTX 5090 CUDA kernels are included; an actual 5090 GPU validation is still required.
 
 For Salad, use one replica, disable autostart and automatic restart, omit
 public networking, and arrange a separate API stop watchdog before starting.

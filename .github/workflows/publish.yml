@@ -27,14 +27,14 @@ jobs:
         run: |
           docker build --pull --platform linux/amd64 -f Dockerfile.salad \
             --label org.opencontainers.image.revision="$GITHUB_SHA" \
-            -t "$IMAGE:sha-$GITHUB_SHA" -t "$IMAGE:v0.1.0" .
+            -t "$IMAGE:sha-$GITHUB_SHA" -t "$IMAGE:v0.2.0" .
       - name: Smoke test runtime without GPU or mining
         run: |
-          docker run --rm "$IMAGE:v0.1.0" node --version
-          docker run --rm "$IMAGE:v0.1.0" node --input-type=module -e "import {keccak256} from 'ethers'; console.log(keccak256(new Uint8Array(84)))"
-          docker run --rm "$IMAGE:v0.1.0" ./keccak-gpu --vectors < /dev/null
+          docker run --rm "$IMAGE:v0.2.0" node --version
+          docker run --rm "$IMAGE:v0.2.0" node --input-type=module -e "import {keccak256} from 'ethers'; console.log(keccak256(new Uint8Array(84)))"
+          docker run --rm "$IMAGE:v0.2.0" ./keccak-gpu --vectors < /dev/null
           set +e
-          docker run --rm "$IMAGE:v0.1.0" > /tmp/no-wallet.log 2>&1
+          docker run --rm "$IMAGE:v0.2.0" > /tmp/no-wallet.log 2>&1
           status=$?
           set -e
           test "$status" -ne 0
@@ -45,8 +45,8 @@ jobs:
         run: |
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker push "$IMAGE:sha-$GITHUB_SHA"
-          docker push "$IMAGE:v0.1.0"
-          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:v0.1.0")"
+          docker push "$IMAGE:v0.2.0"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:v0.2.0")"
           printf 'IMAGE_DIGEST=%s\n' "$digest"
           printf 'Published immutable image: `%s`\n' "$digest" >> "$GITHUB_STEP_SUMMARY"
       - name: Clear registry credentials
